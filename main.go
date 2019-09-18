@@ -22,7 +22,7 @@ func main() {
 		ErrorWriter: os.Stderr,
 	}
 
-	c := cli.NewCLI("mrmanager", "3.0.0")
+	c := cli.NewCLI("mrmanager", "3.1.0")
 	c.Args = os.Args[1:]
 
 	c.Commands = map[string]cli.CommandFactory{
