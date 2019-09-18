@@ -15,9 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/mitchellh/cli"
 	"github.com/mitchellh/go-homedir"
 )
@@ -27,7 +24,6 @@ type RDSCommand struct {
 	DBName     string
 	ExecDBTool bool
 	Passcode   string
-	Region     string
 	Role       string
 	StdOut     bool
 	UI         cli.Ui
@@ -42,7 +38,6 @@ func (c *RDSCommand) Run(args []string) int {
 	cmdFlags.StringVar(&c.Passcode, "p", "", "YubiKey OTP string (default \"DUO Push\")")
 	cmdFlags.StringVar(&c.Role, "r", "readonly", "Vault role to use")
 	cmdFlags.StringVar(&c.Username, "u", os.Getenv("USER"), "Vault username")
-	cmdFlags.StringVar(&c.Region, "e", os.Getenv("AWS_REGION"), "AWS region you're working in")
 	cmdFlags.BoolVar(&c.ExecDBTool, "c", false, "Don't exec DB console tool after getting creds")
 	cmdFlags.Usage = func() { c.UI.Output(c.Help()) }
 	if err := cmdFlags.Parse(args); err != nil {
@@ -62,42 +57,14 @@ func (c *RDSCommand) Run(args []string) int {
 		c.StdOut = true
 	}
 
-	// If AWS_REGION is empty or -e is unset, lets go with us-east-1
-	if c.Region == "" {
-		c.Region = "us-east-1"
-	}
-
 	// RDS subcommand requires a database to be specified.
 	if c.DBName == "" {
 		c.UI.Error("-d is required - specify a database name that matches your vault DB name")
 		os.Exit(1)
 	}
 
-	// Let's try and query AWS to see if we can get the database name specified.
-	// This will get us the host endpoint, to write to a user's credentials file. If
-	// it fails, we'll continue, but we'll write creds to stdout instead, rather
-	// than make a malformed credentials file
-	sess, err := session.NewSessionWithOptions(session.Options{
-		Config: aws.Config{Region: aws.String(c.Region)},
-	})
-	if err != nil {
-		c.UI.Error(fmt.Sprintf("Unable to start AWS session: %s", err))
-		os.Exit(1)
-	}
-	svc := rds.New(sess)
-
-	var RDSFailed = false
 	var RDSAddress string
 	var RDSPort int64
-
-	rdsResult, err := svc.DescribeDBInstances(nil)
-	if err != nil {
-		c.UI.Warn("I'm unable to query AWS for that RDS instance.")
-		c.UI.Warn("Your credentials will be output to stdout if Vault knows about it.")
-		c.UI.Warn(fmt.Sprintf("AWS said: %s", err))
-		c.StdOut = true
-		RDSFailed = true
-	}
 
 	// Vault auth
 	client, vtoken, err := authToVault(c.Username, c.Passcode)
@@ -118,30 +85,17 @@ func (c *RDSCommand) Run(args []string) int {
 	// amazon returned first. Not good.
 	connectionString := dbEndpoint.Data["connection_details"].(map[string]interface{})["connection_url"]
 	connectionPlugin := dbEndpoint.Data["plugin_name"]
-	var connectionEndpoint string
 
 	if strings.Contains(connectionPlugin.(string), "postgresql") {
 		r := regexp.MustCompile("@\\w.+:")
-		connectionEndpoint = strings.TrimSuffix(strings.TrimPrefix(r.FindString(connectionString.(string)), "@"), ":")
+		RDSAddress = strings.TrimSuffix(strings.TrimPrefix(r.FindString(connectionString.(string)), "@"), ":")
+		RDSPort = 5432
 	} else if strings.Contains(connectionPlugin.(string), "mysql") {
 		r := regexp.MustCompile("\\(\\w.+:")
-		connectionEndpoint = strings.TrimSuffix(strings.TrimPrefix(r.FindString(connectionString.(string)), "("), ":")
+		RDSAddress = strings.TrimSuffix(strings.TrimPrefix(r.FindString(connectionString.(string)), "("), ":")
+		RDSPort = 3306
 	} else {
 		c.UI.Error(fmt.Sprintf("I have no idea what DB you're using? Returned plugin is %s", connectionPlugin))
-		os.Exit(1)
-	}
-
-	for _, dbres := range rdsResult.DBInstances {
-		addressVal := *dbres.Endpoint.Address
-		if addressVal == connectionEndpoint {
-			RDSAddress = *dbres.Endpoint.Address
-			RDSPort = *dbres.Endpoint.Port
-			break
-		}
-	}
-
-	if RDSAddress == "" {
-		c.UI.Error("Sorry, I cant find that database. Vault probably has the endpoint configured incorrectly.")
 		os.Exit(1)
 	}
 
@@ -191,11 +145,9 @@ func (c *RDSCommand) Run(args []string) int {
 		// Output to stdout
 		c.UI.Info("----- BEGIN DB CREDS -----")
 		c.UI.Info(fmt.Sprintf("Database: %s", c.DBName))
-		if RDSFailed == false {
-			c.UI.Info(fmt.Sprintf("Host: %s:%d",
-				RDSAddress,
-				RDSPort))
-		}
+		c.UI.Info(fmt.Sprintf("Host: %s:%d",
+			RDSAddress,
+			RDSPort))
 		c.UI.Info(fmt.Sprintf("Username: %s", db.Data["username"]))
 		c.UI.Info(fmt.Sprintf("Password: %s", db.Data["password"]))
 		c.UI.Info("----- END DB CREDS -----")
@@ -237,29 +189,27 @@ func (c *RDSCommand) Run(args []string) int {
 	c.UI.Info(fmt.Sprintf("Vault Token: %s", vtoken))
 	c.UI.Info(fmt.Sprintf("Lease ID: %s", db.LeaseID))
 	c.UI.Info(fmt.Sprintf("Credential Lease Duration: %s.", leaseDuration.String()))
-	if RDSFailed == false {
-		c.UI.Info(fmt.Sprintf("Command:\n%s %s\n", cmdPath, cmdString))
-		if c.ExecDBTool == false {
-			// lets start a dbengine
-			cwd, err := os.Getwd()
-			if err != nil {
-				panic(err)
-			}
-			pa := os.ProcAttr{
-				Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
-				Dir:   cwd,
-			}
+	c.UI.Info(fmt.Sprintf("Command:\n%s %s\n", cmdPath, cmdString))
+	if c.ExecDBTool == false {
+		// lets start a dbengine
+		cwd, err := os.Getwd()
+		if err != nil {
+			panic(err)
+		}
+		pa := os.ProcAttr{
+			Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
+			Dir:   cwd,
+		}
 
-			proc, err := os.StartProcess(cmdPath, cmdExec, &pa)
+		proc, err := os.StartProcess(cmdPath, cmdExec, &pa)
 
-			if err != nil {
-				panic(err)
-			}
+		if err != nil {
+			panic(err)
+		}
 
-			_, err = proc.Wait()
-			if err != nil {
-				panic(err)
-			}
+		_, err = proc.Wait()
+		if err != nil {
+			panic(err)
 		}
 	}
 

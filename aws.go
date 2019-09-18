@@ -19,6 +19,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 )
 
+// AWSCommand context on the command we're running
 type AWSCommand struct {
 	Header     string
 	IAM        bool

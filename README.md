@@ -11,9 +11,7 @@ _It's up to you -- you're the manager now!_
 `mrmanager` is a tool we use internally to get credentials and write them to the correct place. It's a UI wrapper around Vault. It was one of our first golang tools here at Threat Stack. `mrmanager` has opinions about the way you set up Vault and your infrastructure:
 
 * You have Vault configured to give you AWS tokens - either at `aws/` (default) or `aws-envname/` (`-e` flag with `mrmanager aws`).
-* You have Vault configured to give you database credentials using the `database/` endpoint, and you name all your roles `dbname-rolename` with `readonly` being a good default role. Additionally, your databases:
-  * Are in AWS RDS, and the host your run from has the `rds:DescribeDBInstances` permission.
-  * Use standard ports; 5432 for PostgreSQL and 3306 for MySQL
+* You have Vault configured to give you database credentials using the `database/` endpoint, and you name all your roles `dbname-rolename` with `readonly` being a good default role. Additionally, your database uses standard ports; 5432 for PostgreSQL and 3306 for MySQL
 * You use the Duo MFA integration.
 
 ## How can I use it?
