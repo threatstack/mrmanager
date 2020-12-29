@@ -87,7 +87,7 @@ func (c *AWSCommand) Run(args []string) int {
 	if c.TTL != "" {
 		params["ttl"] = []string{c.TTL}
 	}
-	aws, err := client.Logical().ReadWithData(fmt.Sprintf("%s/%s/%s?ttl=%s", engine, credType, c.Role, c.TTL), params)
+	aws, err := client.Logical().ReadWithData(fmt.Sprintf("%s/%s/%s", engine, credType, c.Role), params)
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error reading secret. Vault says: %s", err))
 		os.Exit(1)
