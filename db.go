@@ -28,6 +28,7 @@ type RDSCommand struct {
 	StdOut     bool
 	UI         cli.Ui
 	Username   string
+	TTL        string
 }
 
 // Run - Invoke RDS functionality
@@ -39,6 +40,7 @@ func (c *RDSCommand) Run(args []string) int {
 	cmdFlags.StringVar(&c.Role, "r", "readonly", "Vault role to use")
 	cmdFlags.StringVar(&c.Username, "u", os.Getenv("USER"), "Vault username")
 	cmdFlags.BoolVar(&c.ExecDBTool, "c", false, "Don't exec DB console tool after getting creds")
+	cmdFlags.StringVar(&c.TTL, "t", "", "Specify TTL")
 	cmdFlags.Usage = func() { c.UI.Output(c.Help()) }
 	if err := cmdFlags.Parse(args); err != nil {
 		return 1
@@ -100,7 +102,12 @@ func (c *RDSCommand) Run(args []string) int {
 	}
 
 	// Go get the credential information
-	db, err := client.Logical().Read(fmt.Sprintf("database/creds/%s-%s", c.DBName, c.Role))
+	var params map[string][]string
+	params = make(map[string][]string)
+	if c.TTL != "" {
+		params["ttl"] = []string{c.TTL}
+	}
+	db, err := client.Logical().ReadWithData(fmt.Sprintf("database/creds/%s-%s", c.DBName, c.Role), params)
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error reading secret. Vault says: %s", err))
 		os.Exit(1)
