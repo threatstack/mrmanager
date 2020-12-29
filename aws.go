@@ -29,6 +29,7 @@ type AWSCommand struct {
 	UI         cli.Ui
 	Username   string
 	EnginePath string
+	TTL        string
 }
 
 // Run - Pull AWS credentials
@@ -42,6 +43,7 @@ func (c *AWSCommand) Run(args []string) int {
 	cmdFlags.StringVar(&c.Role, "r", "default", "Vault role name")
 	cmdFlags.StringVar(&c.Username, "u", os.Getenv("USER"), "Vault username")
 	cmdFlags.StringVar(&c.EnginePath, "e", "aws", "Specify secret engine path")
+	cmdFlags.StringVar(&c.TTL, "t", "", "Specify TTL")
 	cmdFlags.Usage = func() { c.UI.Output(c.Help()) }
 	if err := cmdFlags.Parse(args); err != nil {
 		return 1
@@ -80,7 +82,12 @@ func (c *AWSCommand) Run(args []string) int {
 	if engine != "aws" {
 		engine = "aws-" + c.EnginePath
 	}
-	aws, err := client.Logical().Read(fmt.Sprintf("%s/%s/%s", engine, credType, c.Role))
+	var params map[string][]string
+	params = make(map[string][]string)
+	if c.TTL != "" {
+		params["ttl"] = []string{c.TTL}
+	}
+	aws, err := client.Logical().ReadWithData(fmt.Sprintf("%s/%s/%s?ttl=%s", engine, credType, c.Role, c.TTL), params)
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Error reading secret. Vault says: %s", err))
 		os.Exit(1)
@@ -138,17 +145,18 @@ Usage: mrmanager aws [options]
   Request AWS credentials via Vault.
 
   This command will connect ask Vault to generate temporary
-	credentials for AWS. Flags that can be specified include:
-		-a            Specify a different header for .aws/credentials
-		              (Default: "default")
-		-e            Specify a different path (Default: aws/, uses
-			            aws-NAME/ if -e specified)
+  credentials for AWS. Flags that can be specified include:
+    -a            Specify a different header for .aws/credentials
+                  (Default: "default")
+    -e            Specify a different path (Default: aws/, uses
+                  aws-NAME/ if -e specified)
     -i            Request IAM credentials. (Default: false)
     -o            Output credentials to stdout (Default: false)
     -p            YubiKey Passcode (Default: "")
     -r ROLE       The Vault role to use when requesting credentials.
                   (Default: "default")
     -u            Username. (Default: Your Username)
+    -t            TTL (format: 1h1m1s. Default: not specified)
 `
 	return strings.TrimSpace(helpText)
 }
