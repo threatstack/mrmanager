@@ -12,7 +12,7 @@ import (
 	"os"
 
 	vault "github.com/hashicorp/vault/api"
-	"github.com/howeyc/gopass"
+	"golang.org/x/term"
 )
 
 func authToVault(username string, passcode string) (*vault.Client, string, error) {
@@ -32,11 +32,10 @@ func authToVault(username string, passcode string) (*vault.Client, string, error
 
 	// grab passsword
 	fmt.Printf("LDAP Password for %s: ", username)
-	userPassword, err := gopass.GetPasswd()
+	userPassword, err := term.ReadPassword(int(os.Stdin.Fd()))
+	// term eats the newline so fix future formatting
+	fmt.Printf("\n")
 	if err != nil {
-		if err == gopass.ErrInterrupted {
-			return nil, "", fmt.Errorf("Received ^C")
-		}
 		return nil, "", fmt.Errorf("err: %s", err)
 	}
 
