@@ -81,6 +81,10 @@ func (c *RDSCommand) Run(args []string) int {
 		c.UI.Error(fmt.Sprintf("Error reading DB endpoint info. Vault says: %s", err))
 		os.Exit(1)
 	}
+	if dbEndpoint == nil {
+		c.UI.Error("Vault returned nil for that database. Are you sure you spelled it right?")
+		os.Exit(1)
+	}
 
 	// basically: endpoint is the only decent thing to search for the right db. it was substring
 	// before, but then if you had a db named "hive" and a db named "beehive" you'd get whichever
