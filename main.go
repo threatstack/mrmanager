@@ -1,9 +1,8 @@
 // mrmanager - request temporary credentals and put them in a useful place
 // main.go: version and CLI bits
 //
-// Copyright 2019 Threat Stack, Inc.
+// Copyright 2019-2022 F5 Inc.
 // Licensed under the BSD 3-clause license; see LICENSE for more information.
-// Author: Patrick Cable <pat.cable@threatstack.com>
 
 package main
 

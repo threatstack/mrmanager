@@ -1,9 +1,8 @@
 // mrmanager - request temporary credentals and put them in a useful place
 // db.go: support for pulling/writing credentials from RDS instances
 //
-// Copyright 2019 Threat Stack, Inc.
+// Copyright 2019-2022 F5 Inc.
 // Licensed under the BSD 3-clause license; see LICENSE for more information.
-// Author: Patrick Cable <pat.cable@threatstack.com>
 
 package main
 
@@ -69,7 +68,7 @@ func (c *RDSCommand) Run(args []string) int {
 	var RDSPort int64
 
 	// Vault auth
-	client, vtoken, err := authToVault(c.Username, c.Passcode)
+	client, err := authToVault(c.Username, c.Passcode)
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Unable to auth to Vault: %s", err))
 		os.Exit(1)
@@ -93,11 +92,11 @@ func (c *RDSCommand) Run(args []string) int {
 	connectionPlugin := dbEndpoint.Data["plugin_name"]
 
 	if strings.Contains(connectionPlugin.(string), "postgresql") {
-		r := regexp.MustCompile("@\\w.+:")
+		r := regexp.MustCompile(`@\w.+:`)
 		RDSAddress = strings.TrimSuffix(strings.TrimPrefix(r.FindString(connectionString.(string)), "@"), ":")
 		RDSPort = 5432
 	} else if strings.Contains(connectionPlugin.(string), "mysql") {
-		r := regexp.MustCompile("\\(\\w.+:")
+		r := regexp.MustCompile(`\(\w.+:`)
 		RDSAddress = strings.TrimSuffix(strings.TrimPrefix(r.FindString(connectionString.(string)), "("), ":")
 		RDSPort = 3306
 	} else {
@@ -106,8 +105,7 @@ func (c *RDSCommand) Run(args []string) int {
 	}
 
 	// Go get the credential information
-	var params map[string][]string
-	params = make(map[string][]string)
+	params := make(map[string][]string)
 	if c.TTL != "" {
 		params["ttl"] = []string{c.TTL}
 	}
@@ -197,11 +195,10 @@ func (c *RDSCommand) Run(args []string) int {
 	}
 
 	leaseDuration := time.Duration(db.LeaseDuration) * time.Second
-	c.UI.Info(fmt.Sprintf("Vault Token: %s", vtoken))
 	c.UI.Info(fmt.Sprintf("Lease ID: %s", db.LeaseID))
 	c.UI.Info(fmt.Sprintf("Credential Lease Duration: %s.", leaseDuration.String()))
 	c.UI.Info(fmt.Sprintf("Command:\n%s %s\n", cmdPath, cmdString))
-	if c.ExecDBTool == false {
+	if !c.ExecDBTool {
 		// lets start a dbengine
 		cwd, err := os.Getwd()
 		if err != nil {

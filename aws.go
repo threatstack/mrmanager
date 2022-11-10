@@ -1,16 +1,14 @@
 // mrmanager - request temporary credentals and put them in a useful place
 // aws.go: support for pulling and writing AWS credentials
 //
-// Copyright 2019 Threat Stack, Inc.
+// Copyright 2019-2022 F5 Inc.
 // Licensed under the BSD 3-clause license; see LICENSE for more information.
-// Author: Patrick Cable <pat.cable@threatstack.com>
 
 package main
 
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strings"
 	"time"
@@ -63,7 +61,7 @@ func (c *AWSCommand) Run(args []string) int {
 	}
 
 	// Vault auth
-	client, _, err := authToVault(c.Username, c.Passcode)
+	client, err := authToVault(c.Username, c.Passcode)
 	if err != nil {
 		c.UI.Error(fmt.Sprintf("Unable to auth to Vault: %s", err))
 		os.Exit(1)
@@ -72,7 +70,7 @@ func (c *AWSCommand) Run(args []string) int {
 	// There's probably a cleaner way to do this but whatever
 	// Used to fix request path for Vault - then request the creds.
 	var credType string
-	if c.IAM == true {
+	if c.IAM {
 		credType = "creds"
 	} else {
 		credType = "sts"
@@ -82,8 +80,7 @@ func (c *AWSCommand) Run(args []string) int {
 	if engine != "aws" {
 		engine = "aws-" + c.EnginePath
 	}
-	var params map[string][]string
-	params = make(map[string][]string)
+	params := make(map[string][]string)
 	if c.TTL != "" {
 		params["ttl"] = []string{c.TTL}
 	}
@@ -98,7 +95,7 @@ func (c *AWSCommand) Run(args []string) int {
 	awsCfg = fmt.Sprintf("[%s]\n", c.Header)
 	awsCfg = awsCfg + fmt.Sprintf("aws_access_key_id = %s\n", aws.Data["access_key"])
 	awsCfg = awsCfg + fmt.Sprintf("aws_secret_access_key = %s", aws.Data["secret_key"])
-	if c.IAM == false {
+	if !c.IAM {
 		awsCfg = awsCfg + fmt.Sprintf("\naws_session_token = %s", aws.Data["security_token"])
 	}
 	awsCfg = awsCfg + "\n"
@@ -118,7 +115,7 @@ func (c *AWSCommand) Run(args []string) int {
 			os.Mkdir(awsCfgDir, 0700)
 		}
 		_ = os.Remove(awsCfgDir + "/credentials")
-		err = ioutil.WriteFile(awsCfgFile, []byte(awsCfg), 0600)
+		err = os.WriteFile(awsCfgFile, []byte(awsCfg), 0600)
 		if err != nil {
 			c.UI.Error(fmt.Sprintf("Unable to write AWS creds to file: %s", err))
 			os.Exit(1)
