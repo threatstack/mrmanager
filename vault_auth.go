@@ -81,25 +81,17 @@ func loginMFAAuth(client *vault.Client, username string, password string, passco
 		return nil, fmt.Errorf("error in initial login: %s", err)
 	}
 
-	if req.Auth.MFARequirement.GetMFARequestID() != "" {
+	if req.Auth.MFARequirement.MFARequestID != "" {
 		var mfaID string
-		var mfaType string
-		mfaConstraints := req.Auth.MFARequirement.GetMFAConstraints()
 		// There should only be one of these, but there could be multiple.
 		// mrmanager supports: one configured constraint. supporting more
 		// would probably require mrmanager to have a config file of some
 		// sort, or prompt for each OTP vs. take it on the CLI.
-		for _, v := range mfaConstraints {
-			constraint := v.GetAny()
+		for _, v := range req.Auth.MFARequirement.MFAConstraints {
+			constraint := v.Any
 			for _, c := range constraint {
 				mfaID = c.ID
-				mfaType = c.Type
 			}
-		}
-
-		if mfaType == "duo" {
-			// append passcode= to the otp because of https://github.com/hashicorp/vault/issues/17872
-			passcode = "passcode=" + passcode
 		}
 
 		mfaPayload := make(map[string]interface{})
@@ -146,8 +138,10 @@ func getVaultVersion(client *vault.Client) (int, int, int, error) {
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("error getting vault health: %s", err)
 	}
+	// Enterprise version uses +, pull that stuff out.
+	ver := strings.Split(vaultHealth.Version, "+")
 	// If we're 1.10 or below, do things the old way. Else, lets go into the new world
-	ver := strings.Split(vaultHealth.Version, ".")
+	ver = strings.Split(ver[0], ".")
 	maj, err := strconv.Atoi(ver[0])
 	if err != nil {
 		return 0, 0, 0, fmt.Errorf("unable to convert %s to int: %s", ver[0], err)
